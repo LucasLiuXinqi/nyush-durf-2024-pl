@@ -1,0 +1,1288 @@
+\documentclass[a4paper,10pt]{article} % 10pt font size
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{listings} % Better than verbatim for code
+\geometry{top=2cm, bottom=2cm, left=2cm, right=2cm}
+
+\title{DURF}
+\author{Lucas, Puming, Frank, Irina}
+\date{September 2, 2024}
+\usepackage{listings}
+\lstset{
+  basicstyle=\small\ttfamily,
+  frame=single
+}
+
+\begin{document}
+
+\maketitle
+
+\section{Code walk through}
+\subsection{Import}
+\subsection{Monoid}
+Definition of Monoid:
+\begin{itemize}
+    \item Identity: \(M\) itself is a monoid.
+    \item Addition: when a monoid is added with another monoid, the result is still a monoid.
+    \item Associativity: \((x + y) + z = x + (y + z)\)
+    \item Commutativity: \(x + y = y + x\)
+    \item Left identity
+\end{itemize}
+
+\begin{lstlisting}
+HB.mixin Record CMonoid_of M := {
+    id : M;
+    add : M -> M -> M;
+    addrA : associative add;
+    addrC : commutative add;
+    addl0 : left_id id add;
+}.
+\end{lstlisting}
+
+\subsection{Interval}
+Definition of Interval:
+\begin{itemize}
+    \item Interval \(I\) is an interval between \([0, 1]\)
+    \item Join: written as \&, interval join with interval, result interval
+    \item Meet: written as \(\bigotimes\), interval meet with interval, result interval
+    \item Associativity, Commutativity, Left identity
+    \item Inversion: the inverse of an interval is still an interval
+    \item The inversion of an inversion interval is the interval itself
+    \item The inversion follows De Morgan's law: \(\overline{p \& q} = \overline{p} \bigotimes \overline{q}\)
+\end{itemize}
+\begin{lstlisting}
+HB.mixin Record Interval_of I := {
+    zero : I;
+    join : I -> I -> I;
+    joinrA : associative join;
+    joinrC : commutative join;
+    joinl0 : left_id zero join;
+
+    one : I;
+    meet : I -> I -> I;
+    meetrA : associative meet;
+    meetrC : commutative meet;
+    meetl1 : left_id one meet;
+
+    inv : I -> I;
+    inv_inv : forall i, inv (inv i) = i;
+    inv_de_morgan_l : forall p q, inv (join p q) = meet (inv p) (inv q);
+}.
+\end{lstlisting}
+
+\subsubsection{Unique}
+Lemma Unique: 
+\begin{itemize}
+    \item For any \(i_1\), \(i_2\), \(s\) of type \(T\), if \(f(s, i_1) = s\) and \(f(i_2, s) = s\), then \(i_1 = i_2\).
+\end{itemize}
+\begin{lstlisting}
+Lemma id_unique: forall {T: Type} (f: T -> T -> T) (i1 i2: T),
+    (forall s, f s i1 = s) -> (forall s, f i2 s = s) -> (i1=i2).
+Proof.
+    intros.
+    rewrite <- (H i2). rewrite H0. auto.
+Qed. 
+\end{lstlisting}
+
+\subsubsection{Notation}
+\begin{itemize}
+    \item 0: zero
+    \item 1: one
+    \item \(\overline{p}\): inv \(p\)
+    \item \(\bigotimes\): meet
+    \item \&: join
+\end{itemize}
+\begin{lstlisting}
+Notation "0" := zero.
+Notation "1" := one.
+Notation "!" := inv.
+\end{lstlisting}
+
+\subsubsection{De\_morgan}
+Theorem de\_morgan: 
+\begin{itemize}
+    \item For any interval \(p\), \(q\), \(\overline{p \bigotimes q} = \overline{p} \& \overline{q}\).
+\end{itemize}
+\begin{lstlisting}
+Theorem inv_de_morgan_r: forall {A: Interval.type} (p q: A), !(meet p q) = join (!p) (!q).
+Proof.
+    intros.
+    rewrite <- inv_inv. rewrite inv_de_morgan_l. rewrite! inv_inv. reflexivity.
+Qed.    
+\end{lstlisting}
+
+\subsubsection{inv0isid}
+Lemma:
+\begin{itemize}
+    \item $i \bigotimes \overline{0} = i$
+\end{itemize}
+\begin{lstlisting}
+Lemma inv0isid: forall {I: Interval.type} (i:I), meet i (!(0:I)) = i.
+Proof.
+    intros.
+    rewrite <- (inv_inv i) at 2. rewrite <- (joinl0 (!i)). 
+    rewrite inv_de_morgan_l. rewrite inv_inv. apply meetrC.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Inversion of 0 is 1}
+Theorem: 
+\begin{itemize}
+    \item The inversion of 0 is 1: \(1 = \overline{0}\).
+\end{itemize}
+\begin{lstlisting}
+Theorem inv_1_0: forall {I: Interval.type}, (1:I) = !(0:I).
+Proof.
+    intros. simpl. symmetry. apply (id_unique meet (!(0:I)) (1:I) inv0isid meetl1).
+Qed.
+\end{lstlisting}
+
+\subsubsection{Inversion of 1 is 0}
+Corollary: 
+\begin{itemize}
+    \item The inversion of 1 is 0: \(0 = \overline{1}\).
+\end{itemize}
+\begin{lstlisting}
+Corollary inv_0_1: forall {I: Interval.type}, (0:I) = !(1:I).
+Proof.
+intros. rewrite <- inv_inv. rewrite inv_1_0. rewrite! inv_inv. auto.
+Qed.
+\end{lstlisting}
+
+\subsection{Baryspace}
+Definition of baryspace:
+\begin{itemize}
+    \item Barysum: it takes (interval, baryspace, baryspace) in order, and returns a baryspace. In the form of \(a +_p b\).
+    \item Barysum0: \(a +_0 b = a\)
+    \item Barysumid: \(a +_p a = a\)
+    \item Barysuminv: \(a +_p b = b +_{\overline{p}} a\)
+    \item Barysumassoc: if \(s = p \bigotimes q\), and \(p \bigotimes \overline{q} = r \bigotimes \overline{s}\), then \(a +_p(b +_q c) = (a +_r b) +_s c\)
+\end{itemize}
+\begin{lstlisting}
+HB.mixin Record Baryspace_of (I : Interval.type) A := {
+    barysum : I -> A -> A -> A;
+    barysum0 : forall a b, barysum 0 a b = a;
+    barysumid : forall a p, barysum p a a = a;
+    barysuminv : forall a b p, barysum p a b = barysum (!p) b a;
+    barysumassoc: forall a b c p q r s, 
+        s = (meet p q) -> meet p (!q) = meet r (!s) ->  
+        barysum p a (barysum q b c) = barysum s (barysum r a b) c
+}.
+\end{lstlisting}
+
+\subsubsection{Barysum1}
+Lemma:
+\begin{itemize}
+    \item $a + _1b = b$
+\end{itemize}
+\begin{lstlisting}
+Lemma barysum1 {I : Interval.type} {B: Baryspace.type I} (a b: B): barysum 1 a b = b.
+Proof.
+intros. rewrite barysuminv. rewrite <- inv_0_1. apply barysum0. 
+Qed.
+\end{lstlisting}
+
+
+\subsection{Baryinterval}
+Definition Baryinterval:
+\begin{itemize}
+    \item Inversion of baryinterval: $\overline{p +_rq} = \overline{p} + _r\overline{q}$
+    \item Meet of baryinterval: $s \bigotimes (p +_rq) = (s \bigotimes p) + _r(s \bigotimes q)$
+    \item Cancel: when $q \neq 0$, if $p \bigotimes q = p’ \bigotimes q$ ,then $p = p’$
+    \item meet\_sum0: $r \bigotimes s = 0 + _rs$
+    \item Bracket: takes three interval type argument and returns an interval. $[p, q]_r$
+    \item Bracket basic: $[r, s]_t \bigotimes (r + _ts) = t \bigotimes s$
+    \item Bracket assoc1: $(x +_ry) + _sz = x + _{r \& s}(y + _{[r, 1]_s}z)$
+    \item Bracket assoc2: $x + _r(y + _sz) = (x + _{[1, \overline{s}]_r}y)+ _{r \bigotimes s}z$
+    \item Bracket inv: $\overline{[r, s]_t} = [s, r]_{\overline{t}}$
+    \item Bracket dist: $[a \bigotimes r, b \bigotimes s]_t = [a, b]_{[r, s]_t}$
+\end{itemize}
+\begin{lstlisting}
+HB.mixin Record BInterval_of I of _BaryIntv_of I of Interval_of I:= {
+inv_bary_dist: forall (p q r: _BaryIntv.sort I), !(barysum r p q) = barysum r (!p) (!q);
+meet_bary_dist: forall (p q r s: _BaryIntv.sort I), (meet s (barysum r p q)) = barysum r (meet s p) (meet s q);
+cancel: forall(p p' q: _BaryIntv.sort I), q<>0 -> meet p q = meet p' q -> p = p';
+meet_sum0: forall (r s: _BaryIntv.sort I), (meet r s) = barysum r (0: _BaryIntv.sort I) s;
+
+bracket: I -> I -> I -> I;
+bracket_basic: forall r s t: _BaryIntv.sort I, meet (bracket t r s) (barysum t r s) = meet t s;
+bracket_assoc1: forall (A: Baryspace.type I) (x y z: A) (r s: I),
+    barysum s (barysum r x y) z = barysum (join r s) x (barysum (bracket s r 1 ) y z);
+bracket_assoc2: forall (A: Baryspace.type I) (x y z: A) (r s: I),
+    barysum r x (barysum s y z)  = barysum  (meet r s) (barysum (bracket r 1 (!s)) x y) z;
+bracket_inv: forall r s t, !(bracket t r s) = bracket (!t) s r;
+bracket_dist: forall a b r s t, bracket t (meet a r) (meet b s) = bracket (bracket t a b) r s;
+
+(*to be decided*)
+sum_zero_dist: forall p q r: _BaryIntv.sort I, barysum p q r = 0 -> meet p r = 0;
+sum_zero_dist': forall p q r: _BaryIntv.sort I, barysum p q r = 0 -> meet (!p) q = 0;
+bracket_zero: forall a b c, meet a c = 0 -> bracket a b c = 0;
+}.
+\end{lstlisting}
+
+\subsubsection{Notation}
+\begin{itemize}
+    \item $[a, b]_c$
+\end{itemize}
+\begin{lstlisting}
+Notation "[ a , b ]_ c" := (bracket c a b) (at level 40).
+\end{lstlisting}
+
+\subsubsection{0 absorbtion}
+Theorem:
+\begin{itemize}
+    \item  $0 \bigotimes a = 0$
+\end{itemize}
+\begin{lstlisting}
+Theorem meet_0_absorb: forall {I: BInterval.type} (a:I), meet (0:I) a = (0:I).
+Proof.
+intros. rewrite meet_sum0. rewrite barysum0. reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Join 1 absorbtion}
+Corollary:
+\begin{itemize}
+    \item $1 \& a = 1$
+\end{itemize}
+\begin{lstlisting}
+Corollary join_1_absorb: forall {I: BInterval.type} (a:I), join (1:I) a = (1:I).
+Proof.
+intros. rewrite <- (inv_inv (join (1 : I) a)). rewrite inv_de_morgan_l. 
+rewrite <- inv_0_1. rewrite meet_0_absorb. rewrite inv_1_0. reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Join sum 1}
+Theorem:
+\begin{itemize}
+    \item $r \& s = s + _1I$
+\end{itemize}
+\begin{lstlisting}
+Theorem join_sum1: forall (I: BInterval.type) (r s: _BaryIntv.sort I), (join r s) = barysum r s (1: _BaryIntv.sort I).
+Proof.
+intros. rewrite <- (inv_inv (join r s)). rewrite inv_de_morgan_l. 
+rewrite meet_sum0. rewrite inv_bary_dist. rewrite <- barysuminv. rewrite inv_1_0. 
+rewrite inv_inv. reflexivity. Qed.
+\end{lstlisting}
+
+\subsubsection{Join bary dist}
+Theorem:
+\begin{itemize}
+    \item $s \& (p +_rq) = (s \& p) + _r(s \& q)$
+\end{itemize}
+\begin{lstlisting}
+Theorem join_bary_dist: forall (I: BInterval.type) (p q r s: _BaryIntv.sort I), (join s (barysum r p q)) = barysum r (join s p) (join s q).
+Proof.
+intros. rewrite <- (inv_inv (join s (barysum r p q))). 
+rewrite inv_de_morgan_l. rewrite inv_bary_dist. rewrite meet_bary_dist.
+rewrite <- !inv_de_morgan_l. rewrite inv_bary_dist. rewrite !inv_inv.
+reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Example}
+\begin{lstlisting}
+Example test1 (I : BInterval.type) (p: _BaryIntv.sort I):= barysum p p p.
+Example test2 (I : BInterval.type) (p: Interval.sort I) (A: Baryspace.type I) (a: A):= barysum p a a. 
+Example test3 (I : BInterval.type) (p: I) (A: Baryspace.type I) (a: A) := 
+    barysum (barysum p (p: _BaryIntv.sort I) (p: _BaryIntv.sort I)) a a.
+\end{lstlisting}
+\begin{verbatim}
+
+\end{verbatim}
+
+\subsubsection{Bracket identity}
+Lemma:
+\begin{itemize}
+    \item For interval type a, b, if $a \neq 0$, then $[a, a]_b = b$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_id: forall (I: BInterval.type) (a b: I), a <> 0 -> [a, a]_b = b.
+Proof.
+intros. 
+specialize (bracket_basic a a b). 
+rewrite barysumid. intros. apply cancel in H0. 
+apply H0. apply H.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket 1}
+Lemma:
+\begin{itemize}
+    \item For all interval p, q, we have $[0, q]_p = 1$.
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_1: forall (I: BInterval.type) (p q: I), (bracket p 0 q) = 1.
+intros.
+rewrite <- (inv_inv (bracket p 0 q)). rewrite bracket_inv. 
+rewrite bracket_zero. rewrite meetrC. rewrite meet_0_absorb.
+reflexivity.
+rewrite inv_1_0. reflexivity.
+Qed.
+\end{lstlisting}
+
+
+\subsubsection{Bracket 0}
+Lemma:
+\begin{itemize}
+    \item For all interval r, s, if $r \neq 0$, then $[r, s]_0 = 0$.
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_0: forall (I: BInterval.type) (r s: I), r <> 0 -> bracket 0 r s = 0.
+Proof.
+intros. specialize (bracket_basic r s 0). rewrite barysum0. rewrite meet_0_absorb.
+rewrite <- (meet_0_absorb r) at 1. intros. apply cancel in H0.
+apply H0. apply H.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket 0 1}
+Lemma:
+\begin{itemize}
+    \item For any interval p, if $p \neq 0$, then $[0, 1]_p = 1$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_0_1: for all (I: BInterval.type) (p: I), p <> 0 -> bracket p 0 1 = 1.
+Proof.
+intros. specialize (bracket_basic 0 1 p). rewrite <- meet_sum0. rewrite (meetrC p 1). 
+rewrite meetl1. intros. apply (cancel _ _ p). apply H. rewrite meetl1. apply H0.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket 1 0}
+Lemma:
+\begin{itemize}
+    \item For any interval p, if $p \neq 1$, then $[1, 0]_p = 0$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_1_0: forall (I: BInterval.type) (p: I), p <> 1 -> bracket p 1 0 = 0.
+Proof.
+intros.
+assert (!p <> 0). {
+    unfold not. intros. apply H. rewrite inv_0_1 in H0. rewrite <- (inv_inv p).
+    rewrite <- (inv_inv 1). f_equal. apply H0. 
+} 
+rewrite <- (inv_inv p).
+assert (bracket (! (! p)) 1 0 = !(bracket (!p) 0 1)). {
+    rewrite bracket_inv. reflexivity.
+}
+rewrite H1. rewrite inv_0_1. rewrite <- inv_0_1 at 1. f_equal.
+apply bracket_0_1. apply H0.
+Qed.
+\end{lstlisting}
+
+
+\subsubsection{additional definition}
+\begin{lstlisting}
+Definition barysumI {I: BInterval.type} (t r s: I): (I) :=
+barysum t (r:_BaryIntv.sort I) s.
+\end{lstlisting}
+
+\subsubsection{Bracket decomp 1 0}
+Lemma:
+\begin{itemize}
+    \item If $x + _p(y + _qz) = 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x, y]_r \bigotimes \overline{[x + _ry, z]_s} = [x, y + _qz]_p \bigotimes \overline{[y, z]_q}$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_decomp1_0: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
+barysum p x (barysum q y z) = 0 ->
+s = meet p q -> meet p (!q) = meet r (!s) ->  
+meet (bracket r x y) (!(bracket s (barysum r x y) z)) = 
+    meet (bracket p x (barysum q y z)) (!(bracket q y z)).
+Proof.
+intros.
+assert (barysum s (barysum r x y) z = 0) as HSR.
+{
+    rewrite <- H. symmetry. apply barysumassoc. apply H0. apply H1.
+}
+apply sum_zero_dist in H as H'1. apply sum_zero_dist' in H as H'2.
+apply sum_zero_dist in HSR as HSR'1. apply sum_zero_dist' in HSR as HSR'2.
+rewrite !bracket_inv. rewrite (bracket_zero p). apply H'1.
+rewrite (bracket_zero (!s)). apply HSR'2. rewrite meet_0_absorb. rewrite meetrC. rewrite meet_0_absorb.
+reflexivity.
+Qed.
+\end{lstlisting}
+
+
+\subsubsection{Bracket decomp 2 0}
+Lemma:
+\begin{itemize}
+    \item If $x + _p(y + _qz) = 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \bigotimes [y, z]_q$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_decomp2_0: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
+barysum p x (barysum q y z) = 0 ->
+s = meet p q -> meet p (!q) = meet r (!s) ->  
+    (bracket s (barysum r x y) z) = 
+    meet (bracket p x (barysum q y z)) (bracket q y z).
+Proof.
+intros.
+assert (barysum s (barysum r x y) z = 0) as HSR.
+{
+    rewrite <- H. symmetry. apply barysumassoc. apply H0. apply H1.
+}
+apply sum_zero_dist in H as H'1. apply sum_zero_dist' in H as H'2.
+apply sum_zero_dist in HSR as HSR'1. apply sum_zero_dist' in HSR as HSR'2.
+rewrite (bracket_zero s). apply HSR'1. rewrite (bracket_zero p). apply H'1.
+rewrite meet_0_absorb.
+reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{eq0 i decidable}
+Axiom:
+\begin{itemize}
+    \item For any interval a, $a = 0$ or $a \neq 0$.
+\end{itemize}
+\begin{lstlisting}
+Axiom eq0_i_decidable: forall (I:BInterval.type) (a: I), a = (0:I) \/ a <> (0:I).
+\end{lstlisting}
+
+\subsubsection{meet0}
+Theorem:
+\begin{itemize}
+    \item If $a \bigotimes b = 0$, then a = 0 or b = 0.
+\end{itemize}
+\begin{lstlisting}
+Theorem meet0: forall (I:BInterval.type) (a b: I), meet a b = 0 -> a = 0 \/ b = 0.
+Proof.
+intros.
+destruct (eq0_i_decidable I a). left. assumption.
+right. rewrite <- (meet_0_absorb a) in H. rewrite (meetrC a) in H. 
+apply cancel in H. apply H. apply H0.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket 0'}
+Theorem:
+\begin{itemize}
+    \item If $a \bigotimes c = 0$, then $[b, d]_a \bigotimes c = 0$
+\end{itemize}
+\begin{lstlisting}
+Theorem bracket_zero': forall {I:BInterval.type} (a b c d:I), meet a c = 0 -> meet (bracket a b d) c = 0.
+Proof.
+intros.
+apply meet0 in H as H1. destruct H1. 
+- rewrite H0. rewrite bracket_zero. apply meet_0_absorb. apply meet_0_absorb.
+- rewrite H0. rewrite meetrC. apply meet_0_absorb.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket 1 1}
+Theorem:
+\begin{itemize}
+    \item $[1, 1]_a = a$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_1_1: forall {I:BInterval.type} (a: I), [1,1]_ a = a.
+Proof.
+intros. specialize (bracket_basic 1 1 a). rewrite barysumid. rewrite <- !(meetrC 1 _).
+rewrite !meetl1. tauto.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket decomp1\_}
+Lemma:
+\begin{itemize}
+    \item If $x + _p(y +_qz) \neq 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x, y]_r \bigotimes \overline{[x + _ry, z]_s} = [x, y +_qz]_p \bigotimes \overline{[y, z]_q}$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_decomp1_: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
+barysum p x (barysum q y z) <> 0 ->
+s = meet p q -> meet p (!q) = meet r (!s) ->  
+meet (bracket r x y) (!(bracket s (barysum r x y) z)) = 
+    meet (bracket p x (barysum q y z)) (!(bracket q y z)).
+Proof.
+intros.
+rewrite !bracket_inv. 
+assert (barysum p x (barysum q y z) = barysumI s (barysum r x y) z).
+{
+    unfold barysumI.
+    apply (barysumassoc (x:_BaryIntv.sort I)). apply H0. apply H1.
+} 
+assert (meet (meet (bracket r x y)
+(bracket (! s) z (barysum r x y))) (barysum p x (barysum q y z)) = meet (meet (!s) r) y).
+{
+    rewrite H2. rewrite <- meetrA. unfold barysumI. rewrite (barysuminv _ _ s). rewrite bracket_basic.
+    rewrite (meetrC (!s) (barysum r x y)). rewrite meetrA. rewrite bracket_basic. 
+    rewrite meetrC. rewrite meetrA. reflexivity.
+}
+assert (meet (meet (bracket p x (barysum q y z))
+(bracket (! q) z y)) (barysum p x (barysum q y z)) = meet (meet (!s) r) y).
+{
+    rewrite (meetrC (bracket p x (barysum q y z))). rewrite <- meetrA.
+    rewrite bracket_basic. rewrite barysuminv. rewrite meetrC. rewrite <- (meetrA p).
+    rewrite (meetrC (barysum (! q) z y)). rewrite bracket_basic. rewrite meetrA. 
+    rewrite H1. rewrite (meetrC r). reflexivity.
+}
+rewrite <- H4 in H3. apply cancel in H3. apply H3. apply H.
+Qed.
+\end{lstlisting}
+
+
+\subsubsection{bracket decomp2\_}
+Lemma:
+\begin{itemize}
+    \item If $x + _p(y + _qz) \neq 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \bigotimes [y, z]_q$
+\end{itemize}
+\begin{lstlisting}
+Lemma bracket_decomp2_: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
+barysum p x (barysum q y z) <> 0 -> s = meet p q -> meet p (!q) = meet r (!s) ->  
+    (bracket s (barysum r x y) z) = 
+    meet (bracket p x (barysum q y z)) (bracket q y z).
+Proof.
+intros.
+assert (barysum p x (barysum q y z) = barysumI s (barysum r x y) z).
+{
+    unfold barysumI.
+    apply (barysumassoc (x:_BaryIntv.sort I)). apply H0. apply H1.
+} 
+assert (meet (bracket s (barysum r x y) z) (barysum p x (barysum q y z)) = meet s z).
+{
+    rewrite H2. unfold barysumI. apply bracket_basic.
+}
+assert (meet (meet (bracket p x (barysum q y z)) (bracket q y z)) (barysum p x (barysum q y z)) = meet s z).
+{
+    rewrite (meetrC _ (bracket q y z)). rewrite <- meetrA. rewrite bracket_basic.
+    rewrite (meetrC p). rewrite meetrA. rewrite bracket_basic. rewrite meetrC. 
+    rewrite H0. rewrite meetrA. reflexivity.
+}
+rewrite <- H4 in H3. apply cancel in H3. apply H3. apply H.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket decomp1}
+Theorem:
+\begin{itemize}
+    \item For all intervals x, y, z, p, q, r, s, if $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x, y]_r \bigotimes\overline{[x + _ry, z]_s} = [x, y + _qz]_p \bigotimes \overline{[y, z]_q}$.
+\end{itemize}
+\begin{lstlisting}
+Theorem bracket_decomp1: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
+  s = meet p q -> meet p (!q) = meet r (!s) ->  
+  meet (bracket r x y) (!(bracket s (barysum r x y) z)) = 
+    meet (bracket p x (barysum q y z)) (!(bracket q y z)).
+Proof.
+  intros. destruct (eq0_i_decidable I (barysum p x (barysum q y z))).
+  apply bracket_decomp1_0; assumption.
+  apply bracket_decomp1_; assumption.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Bracket decomp2}
+Theorem:
+\begin{itemize}
+    \item For all intervals x, y, z, p, q, r, s, if $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \bigotimes [y, z]_q$.
+\end{itemize}
+\begin{lstlisting}
+Theorem bracket_decomp2: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
+  s = meet p q -> meet p (!q) = meet r (!s) ->  
+    (bracket s (barysum r x y) z) = 
+      meet (bracket p x (barysum q y z)) (bracket q y z).
+Proof.
+  intros. destruct (eq0_i_decidable I (barysum p x (barysum q y z))).
+  apply bracket_decomp2_0; assumption.
+  apply bracket_decomp2_; assumption.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Barysum 2 0}
+Theorem:
+\begin{itemize}
+    \item If $r + _ts = 0$, then $(x + _ry) + _t(x' + _sy') = (x + _{[\overline{r}, \overline{s}]_t}x') + _{r + _ts}(y + _{[r, s]_t}y')$
+\end{itemize}
+\begin{lstlisting}
+Theorem barysum_2_0: forall (I: BInterval.type) (A: Baryspace.type I) 
+  (x x' y y': A) (r s t: I), barysumI t r s = 0 -> 
+  barysum t (barysum r x y) (barysum s x' y')
+    = barysum (barysumI t r s) (barysum (bracket t (!r) (!s)) x x') (barysum (bracket t r s) y y').
+Proof.
+  intros. 
+  rewrite H. rewrite barysum0. 
+  rewrite (barysuminv x y r). rewrite bracket_assoc1.
+  rewrite (bracket_assoc2 A x x' y'). 
+  rewrite (barysuminv _ _ (meet (bracket t (! r) 1) s)). 
+  rewrite (bracket_assoc2 A y).
+  rewrite (barysuminv _ _ (meet (join (! r) t)(!(meet (bracket t (! r) 1)s)))).
+
+  assert ((bracket (bracket t (! r) 1) 1 (! s)) = bracket t (!r) (!s)).
+  {
+    rewrite <- bracket_dist. rewrite (meetrC (!r) 1). rewrite !meetl1. reflexivity.
+  }
+  rewrite H0.
+  assert (((!(meet (join (! r) t)(!(meet(bracket t (! r) 1)s))))) = 0).
+  {
+    rewrite <- (inv_inv t) at 1. rewrite <- inv_de_morgan_r. rewrite (meetrC r). 
+    rewrite (sum_zero_dist' t r s). apply H. rewrite <- inv_1_0.  rewrite meetl1.
+    rewrite inv_inv. rewrite bracket_zero'. apply (sum_zero_dist t r s). apply H.
+    reflexivity.
+  }
+  rewrite H1. rewrite barysum0. reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Braysum 2\_}
+Theorem:
+\begin{itemize}
+    \item If $r + _ts \neq 0$, then $(x + _ry) + _t(x' + _sy') = (x + _{[\overline{r}, \overline{s}]_t}x') + _{r + _ts}(y + _{[r, s]_t}y')$
+\end{itemize}
+\begin{lstlisting}
+Theorem barysum_2_: forall (I: BInterval.type) (A: Baryspace.type I) 
+  (x x' y y': A) (r s t: I), barysumI t r s <> 0 -> 
+  barysum t (barysum r x y) (barysum s x' y')
+    = barysum (barysumI t r s) (barysum (bracket t (!r) (!s)) x x') (barysum (bracket t r s) y y').
+Proof. 
+  intros.
+  rewrite (barysuminv x y r). rewrite bracket_assoc1.
+  rewrite (bracket_assoc2 A x x' y'). 
+  rewrite (barysuminv _ _ (meet (bracket t (! r) 1) s)). 
+  rewrite (bracket_assoc2 A y).
+  rewrite (barysuminv _ _ (meet (join (! r) t)(!(meet (bracket t (! r) 1)s)))).
+  assert (!(meet (join (! r) t) (!(meet (bracket t (! r) 1) s)) )= barysumI t r s).
+  {
+    rewrite meet_sum0. rewrite inv_bary_dist.
+    rewrite inv_inv. rewrite meet_sum0. rewrite <- inv_1_0.
+    rewrite <- (bracket_assoc1 (_BaryIntv.sort I) 1). rewrite <- barysuminv.
+    rewrite <- (meet_sum0 r). rewrite meetrC. rewrite meetl1. reflexivity.
+  }
+  rewrite H0.
+  assert ((bracket (bracket t (! r) 1) 1 (! s)) = bracket t (!r) (!s)).
+  {
+    rewrite <- bracket_dist. rewrite (meetrC (!r) 1). rewrite !meetl1. reflexivity.
+  }
+  rewrite H1.
+  rewrite inv_inv.
+  assert ((bracket (join (! r) t) 1 (meet (bracket t (! r) 1)s)) = bracket t r s).
+  {
+    rewrite join_sum1. 
+    assert (
+      meet (bracket (barysum t(! r: _BaryIntv.sort I) 1) 1 (meet (bracket t (! r) 1) s)) 
+      (barysum (barysum t (! r:_BaryIntv.sort I) 1) (1:_BaryIntv.sort I) (meet (bracket t (! r) 1) s)) = meet t s).
+    {
+      rewrite bracket_basic. rewrite meetrA. rewrite (meetrC (barysumI t (! r) 1)). 
+      rewrite bracket_basic. rewrite (meetrC t 1). rewrite meetl1. reflexivity.
+    } 
+    rewrite meet_sum0 in H0. rewrite inv_bary_dist in H0. rewrite inv_inv in H0.
+    rewrite joinrC in H0. rewrite join_sum1 in H0. rewrite <- inv_1_0 in H0. rewrite H0 in H2.
+    assert (meet t s = meet (bracket t r s) (barysumI t r s)). symmetry. apply bracket_basic.
+    rewrite H3 in H2. apply cancel in H2. rewrite <- (join_sum1 (I) (!r) (t)). rewrite joinrC. 
+    rewrite join_sum1. apply H2. apply H.
+  }
+  rewrite H2. reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{}
+Theorem:
+\begin{itemize}
+    \item $(x +_ry) + _t(x' + _sy') = (x + _{[\overline{r}, \overline{s}]_t}x')+ _{(r + _ts)}(y + _{[r, s]_t}y')$
+\end{itemize}
+\begin{lstlisting}
+Theorem barysum_2: forall (I: BInterval.type) (A: Baryspace.type I) 
+  (x x' y y': A) (t r s: I), barysum t (barysum r x y) (barysum s x' y')
+    = barysum (barysumI t r s) (barysum (bracket t (!r) (!s)) x x') (barysum (bracket t r s) y y').
+Proof.
+intros.
+destruct (eq0_i_decidable I (barysumI t r s)).
+apply barysum_2_0; assumption.
+apply barysum_2_; assumption.
+Qed.
+\end{lstlisting}
+
+\subsection{SumBarySpace}
+\begin{lstlisting}
+Inductive SumBarySpace {I: BInterval.type} (A B: Baryspace.type I) :=
+| Tuple (a: A) (p: I) (b: B).
+\end{lstlisting}
+
+\subsubsection{Notation}
+\begin{itemize}
+    \item $(a, b, c)$
+\end{itemize}
+\begin{lstlisting}
+Notation "( a , b , c )" := (Tuple _ _ a b c).
+\end{lstlisting}
+
+\subsubsection{Sum barysum}
+Definition:
+\begin{itemize}
+    \item 
+\end{itemize}
+\begin{lstlisting}
+Definition sum_barysum {I: BInterval.type} {A B: Baryspace.type I} (t: I)
+  (p1 p2 : SumBarySpace A B) := 
+match p1 with
+| (x, r, y) => match p2 with 
+| (x', s, y') => (barysum (bracket t (!r) (!s)) x x', (barysumI t r s), (barysum (bracket t r s) y y'))
+end end.
+\end{lstlisting}
+
+\subsubsection{Sum barysum0}
+Lemma:
+\begin{itemize}
+    \item $(0, p_1, p_2) = p_1$
+\end{itemize}
+\begin{lstlisting}
+Lemma sum_barysum0: forall {I: BInterval.type} {A B: Baryspace.type I} (p1 p2 : SumBarySpace A B),
+  sum_barysum 0 p1 p2 = p1.
+Proof.
+intros.
+destruct p2. destruct p1. unfold sum_barysum. 
+rewrite !bracket_zero. apply meet_0_absorb. apply meet_0_absorb. 
+unfold barysumI. f_equal; apply barysum0. 
+Qed.
+\end{lstlisting}
+
+\subsubsection{Sum barysumid}
+Lemma:
+\begin{itemize}
+    \item $(t, p_1, p_1) = p_1$
+\end{itemize}
+\begin{lstlisting}
+Lemma sum_barysumid: forall {I: BInterval.type} {A B: Baryspace.type I}  (p1 : SumBarySpace A B) (t: I),
+  sum_barysum t p1 p1 = p1.
+Proof.
+intros.
+destruct p1. unfold sum_barysum. unfold barysumI. rewrite !barysumid. reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Sum barysuminv}
+Lemma
+\begin{itemize}
+    \item $(t, p_1, p_2) = (\overline{t}, p_2, p_1)$
+\end{itemize}
+\begin{lstlisting}
+Lemma sum_barysuminv: forall {I: BInterval.type} {A B: Baryspace.type I} (p1 p2 : SumBarySpace A B) (t: I) ,
+  sum_barysum t p1 p2 = sum_barysum (!t) p2 p1.
+Proof.
+intros.
+destruct p2. destruct p1. simpl. unfold barysumI. 
+f_equal; try rewrite <- (bracket_inv _ _ (t)); rewrite barysuminv; reflexivity.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Sum barysumassoc}
+Lemma:
+\begin{itemize}
+    \item If $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $(p, a, (q, b, c)) = (s, (r, a, b), c)$
+\end{itemize}
+\begin{lstlisting}
+Lemma sum_barysumassoc: forall {I: BInterval.type} {A B: Baryspace.type I} (a b c: SumBarySpace A B) (p q r s: I),
+s = (meet p q) -> meet p (!q) = meet r (!s) ->  
+      sum_barysum p a (sum_barysum q b c) = sum_barysum s (sum_barysum r a b) c.
+Proof.
+intros.
+destruct a,b,c.
+unfold sum_barysum. 
+assert (barysumI p p0 (barysumI q p1 p2) = barysumI s (barysumI r p0 p1) p2).
+{
+  unfold barysumI.
+  apply (barysumassoc (p0:_BaryIntv.sort I)). apply H. apply H0.
+} 
+f_equal. 
+- unfold barysumI. rewrite !inv_bary_dist. apply barysumassoc.
+apply bracket_decomp2. apply H. apply H0.
+symmetry. apply bracket_decomp1. apply H. apply H0.
+- apply H1.
+- unfold barysumI. apply barysumassoc.
+apply bracket_decomp2. apply H. apply H0.
+symmetry. apply bracket_decomp1. apply H. apply H0.
+Qed.
+\end{lstlisting}
+
+\subsection{Sum Baryspace barycentric}
+\begin{lstlisting}
+HB.instance Definition sum_baryspace_barycentric {I: BInterval.type} (A B: Baryspace.type I) := 
+ Baryspace_of.Build 
+  I (SumBarySpace A B) sum_barysum sum_barysum0 sum_barysumid sum_barysuminv sum_barysumassoc.
+\end{lstlisting}
+
+\subsection{Quotient}
+Definition:
+\begin{itemize}
+    \item Compatible: If x = y, then f(x) = f(y).
+    \item Quo
+    \item Class
+    \item Quo comp: 
+    \item Quo comp rev: 
+    \item Quo lift:
+    \item Quo list prop:
+    \item Quo sur:
+    \item Quo sure t:
+\end{itemize}
+\begin{lstlisting}
+(* quotienting the space *)
+From Coq Require Import Arith Relations Program Logic.
+
+Definition compatible (T R : Type) (eqv : T -> T -> Prop)
+  (f : T -> R) := forall x y : T, eqv x y -> f x = f y.
+
+Record type_quotient (T : Type) (eqv : T -> T -> Prop)
+  (Hequiv : equiv T eqv) := {
+  quo :> Type;
+  class :> T -> quo;
+  quo_comp : forall (x y : T), eqv x y -> class x = class y;
+  quo_comp_rev : forall (x y : T), class x = class y -> eqv x y;
+  quo_lift : forall (R : Type) (f : T -> R),
+    compatible _ _ eqv f -> quo -> R;
+  quo_lift_prop : forall (R : Type) (f : T -> R) (Hf : compatible _ _ eqv f),
+    forall (x : T),  (quo_lift _ f Hf) (class x) = f x;
+
+
+  (* 
+  quo_surj : forall (c : quo), 
+    exists x : T, c = class x; 
+  Here, instead of simply stating that `class` is surjective, 
+  we require that `class` have a right inverse.
+  These two requirements are equal assuming the axiom of choice.
+  *)
+  quo_sur (c:quo) : T;
+  quo_sur_t (c:quo) : c = class (quo_sur c)
+}.
+\end{lstlisting}
+
+\subsubsection{Quitient}
+The axiom \texttt{quotient} defines a quotient type for a given type \texttt{T} under an equivalence relation \texttt{eqv}. The axiom states that for any type \texttt{T}, an equivalence relation \texttt{eqv} on \texttt{T}, and a proof \texttt{p} that \texttt{eqv} is an equivalence relation, there exists a quotient type, denoted \texttt{type\_quotient T eqv p}. The quotient type groups elements of \texttt{T} into equivalence classes according to the relation \texttt{eqv}, abstracting over the specific representatives of each class.
+
+\begin{lstlisting}
+Axiom quotient : forall (T : Type) (eqv : T -> T -> Prop) (p: equiv T eqv), 
+  (type_quotient T eqv p).
+
+Arguments quo {T} {eqv} {Hequiv}.
+Arguments class {T} {eqv} {Hequiv}.
+Arguments quo_lift {T} {eqv} {Hequiv} _ {R}.
+
+Check quo_lift.
+\end{lstlisting}
+
+\subsubsection{BEquiv}
+\begin{lstlisting}
+Record BEquiv {I : BInterval.type} {A : Baryspace.type I} := instBequiv{
+  R : A -> A -> Prop;
+  Equiv : equiv _ R;
+  Compat : forall (x y x' y': A) (p: I), R x x' -> R y y' -> R (barysum p x y) (barysum p x' y');
+  Qs := quotient A R Equiv
+}.
+\end{lstlisting}
+
+
+%(*The equivalence relation that defines A⊕B*)
+
+\begin{lstlisting}
+Inductive SumBaryR {I : BInterval.type} {A B: Baryspace.type I} : (SumBarySpace A B) ->  (SumBarySpace A B) -> Prop := 
+  | Refl (p: I) (a: A) (b: B): SumBaryR (a,p,b) (a,p,b)
+  | A0 (a: A) (b b': B): SumBaryR (a,0,b) (a,0,b')
+  | B1 (a a': A) (b: B): SumBaryR (a,1,b) (a',1,b).
+\end{lstlisting}
+
+\texttt{BEquiv} defines an equivalence relation \texttt{R} on a barycentric space \texttt{A}. It ensures that \texttt{R} is an equivalence relation and that it is compatible with the barycentric sum operation. The quotient type \texttt{Qs} groups elements of \texttt{A} into equivalence classes under \texttt{R}.
+
+
+\subsubsection{Sum barysum expl}
+Lemma:
+\begin{itemize}
+    \item $(a, p_0, b) + _p(a_0, p_1, b_0) = (p, (a, p_0, b), (a_0, p_1, b_0))$
+\end{itemize}
+\begin{lstlisting}
+Lemma sum_barysum_expl: forall {I : BInterval.type} {A B: Baryspace.type I} (p p0 p1: I) (a a0: A) (b b0:B), barysum p (a, p0, b) (a0, p1, b0) = sum_barysum p (a, p0, b) (a0, p1, b0).
+reflexivity. Qed.
+\end{lstlisting}
+
+\subsubsection{Sum bary compat}
+Lemma:
+\begin{itemize}
+    \item If SumBaryR x, x' and SumBaryR y, y', then SumBaryR $(x + +py), (x' + _py')$.
+\end{itemize}
+\begin{lstlisting}
+Lemma sum_baryr_compat: ∀ {I : BInterval.type} {A B: Baryspace.type I} (x y x' y': SumBarySpace A B ) (p: I), SumBaryR x x' -> SumBaryR y y' -> SumBaryR (barysum p x y) (barysum p x' y').
+Proof.
+  intros.
+  inversion H.
+  - inversion H0; rewrite !sum_barysum_expl; unfold sum_barysum.
+    + apply Refl.
+    + rewrite (bracket_zero p p0 0).
+      rewrite meetrC. apply meet_0_absorb. rewrite !barysum0. apply Refl.
+    + rewrite <- inv_0_1. 
+      rewrite (bracket_zero p (inv p0) 0). rewrite meetrC. apply meet_0_absorb.
+      rewrite !barysum0. apply Refl.
+  - inversion H0; rewrite !sum_barysum_expl; unfold sum_barysum. 
+    + rewrite !bracket_1. rewrite !barysum1. apply Refl.
+    + unfold barysumI. rewrite barysumid. apply A0.
+    + rewrite <- inv_0_1. rewrite <- inv_1_0. rewrite bracket_zero.
+      rewrite meetrC. apply meet_0_absorb. rewrite !barysum0.
+      rewrite bracket_1. rewrite !barysum1. apply Refl.
+  - inversion H0; rewrite !sum_barysum_expl; unfold sum_barysum. 
+    + rewrite <- inv_0_1. rewrite bracket_1. rewrite !barysum1. apply Refl.
+    + rewrite <- inv_0_1. rewrite <- inv_1_0. rewrite (bracket_zero p 1 0).
+      rewrite meetrC. apply meet_0_absorb. rewrite !bracket_1.
+      rewrite !barysum1. rewrite !barysum0. apply Refl.
+    + unfold barysumI. rewrite barysumid. apply B1.
+Qed.
+\end{lstlisting}
+
+\subsubsection{Sum baryr eqv}
+Lemma:
+\begin{itemize}
+    \item Unsolved?
+\end{itemize}
+\begin{lstlisting}
+(*The problem here is that the Interval cannot be singleton*)
+Lemma sum_baryr_eqv : ∀ {I : BInterval.type} {A B: Baryspace.type I}, equiv (SumBarySpace A B) SumBaryR.
+Proof.
+Admitted.
+(* intros.
+unfold equiv. split; try split.
++ unfold reflexive. intros. destruct x. apply Refl.
++ unfold transitive. intros. destruct x,y,z. inversion H.
+  - apply H0. 
+  - inversion H0.
+    ++ rewrite <- H12. rewrite <- H6. apply A0.
+    ++ apply A0.
+    ++ 
+  - inversion H0. 
+    ++ rewrite <- H12. rewrite <- H6. apply B1.
+    ++ 
+    ++ apply B1.
++ unfold symmetric. intros. inversion H.
+  - apply Refl.
+  - apply A0.
+  - apply B1. *)
+\end{lstlisting}
+
+This lemma, \texttt{sum\_baryr\_eqv}, aims to prove that the relation \texttt{SumBaryR} is an equivalence relation on the sum of two barycentric spaces, \texttt{A} and \texttt{B}. However, the proof is currently unfinished and noted as problematic due to the interval not being allowed to be a singleton.
+
+\subsection{Quot sum space}
+\begin{lstlisting}
+Definition quot_sum_space {I : BInterval.type} (A B: Baryspace.type I) := quotient (SumBarySpace A B) SumBaryR sum_baryr_eqv.
+\end{lstlisting}
+
+The \texttt{quot\_sum\_space} defines the quotient of the sum of two barycentric spaces, \texttt{A} and \texttt{B}, under the relation \texttt{SumBaryR}, using the equivalence relation \texttt{sum\_baryr\_eqv}.
+
+\subsection{Sum bary bequiv}
+\begin{lstlisting}
+Definition sum_bary_bequiv {I : BInterval.type} (A B: Baryspace.type I) := 
+  instBequiv I (SumBarySpace A B) SumBaryR sum_baryr_eqv sum_baryr_compat.
+\end{lstlisting}
+The \texttt{sum\_bary\_bequiv} definition creates an instance of \texttt{BEquiv} for the sum of two barycentric spaces, \texttt{A} and \texttt{B}, using the relation \texttt{SumBaryR}, the equivalence proof \texttt{sum\_baryr\_eqv}, and the compatibility condition \texttt{sum\_baryr\_compat}.
+
+\subsection{Quot sum compat}
+\begin{lstlisting}
+Definition quot_sum_compat {I: BInterval.type} {A: Baryspace.type I} (be: BEquiv) : Prop := 
+    forall (x y x' y': A) (p: I), (R be) x x' -> (R be) y y' -> (R be) (barysum p x y) (barysum p x' y').
+\end{lstlisting}
+The \texttt{quot\_sum\_compat} definition specifies a compatibility condition for a barycentric space \texttt{A} with an equivalence relation \texttt{be}. It states that if pairs of elements \texttt{x, x'} and \texttt{y, y'} are related by \texttt{R be}, then their barycentric sums are also related by \texttt{R be}.
+
+\subsection{Quot sum part}
+\begin{lstlisting}
+Definition quot_sum_part {I: BInterval.type} {A: Baryspace.type I} (be: BEquiv) (p: I): 
+  (A -> A -> Qs be):=
+    fun a1 a2 => (class (Qs be)) (barysum p a1 a2).
+\end{lstlisting}
+
+\begin{lstlisting}
+Arguments quot_sum_part (I) (A): clear implicits.
+\end{lstlisting}
+
+The \texttt{quot\_sum\_part} definition creates a function that, given two elements \texttt{a1} and \texttt{a2} from a barycentric space \texttt{A}, computes the equivalence class (in the quotient space \texttt{Qs be}) of their barycentric sum with respect to a parameter \texttt{p}.
+
+\subsubsection{Quot sum part1 compat}
+
+\begin{lstlisting}
+Lemma quot_sum_part1_compat {I: BInterval.type} {A: Baryspace.type I}
+  (be: BEquiv) (p: I): 
+    compatible _ _ (R be) (quot_sum_part I A be p). 
+Proof.
+unfold compatible. 
+intros. apply functional_extensionality. intros. 
+unfold quot_sum_part. unfold quot_sum_compat in H. 
+apply quo_comp. apply (Compat be). apply H. destruct (Equiv be). 
+apply H0. 
+Qed.
+\end{lstlisting}
+
+The \texttt{quot\_sum\_part1\_compat} lemma proves that the \texttt{quot\_sum\_part} function is compatible with the equivalence relation \texttt{R be} on the barycentric space \texttt{A}. It shows that if \texttt{x} and \texttt{x'} are related by \texttt{R be}, then the function respects this relation.
+
+\subsection{Quot sum lift1}
+\begin{lstlisting}
+Definition quot_sum_lift1 {I: BInterval.type} {A: Baryspace.type I} (be: BEquiv) (p: I): 
+    (Qs be) -> A -> (Qs be)  := 
+      quo_lift _ (quot_sum_part I A be p) (quot_sum_part1_compat be p).
+\end{lstlisting}
+
+The \texttt{quot\_sum\_lift1} definition defines a function that lifts an element of the quotient space \texttt{Qs be} to another element of \texttt{Qs be} by applying a function derived from \texttt{quot\_sum\_part}. It uses the compatibility lemma \texttt{quot\_sum\_part1\_compat} to ensure the lift respects the equivalence relation.
+
+\subsection{Quot sum part2}
+\begin{lstlisting}
+Definition quot_sum_part2 (I: BInterval.type) (A: Baryspace.type I) 
+    (be: BEquiv) (p: I) 
+    (ac: (Qs be)): A -> (Qs be) := 
+        (quot_sum_lift1 be p) ac.
+\end{lstlisting}
+The \texttt{quot\_sum\_part2} definition defines a function that maps an element of \texttt{A} to the quotient space \texttt{Qs be} using \texttt{quot\_sum\_lift1}. It applies \texttt{quot\_sum\_lift1} to the given element \texttt{ac} of \texttt{Qs be}.
+
+\subsubsection{Quot sum part2 compat}
+\begin{lstlisting}
+Lemma quot_sum_part2_compat {I: BInterval.type} {A: Baryspace.type I} 
+  (be: BEquiv) (p: I) (ac: Qs be): 
+    compatible _ _ (R be) (quot_sum_part2 I A be p ac). 
+Proof.
+unfold compatible.
+intros. 
+unfold quot_sum_part2. 
+unfold quot_sum_lift1. unfold quot_sum_part. specialize (quo_sur_t _ _ _ (Qs be) ac) as Hs.
+rewrite Hs. 
+rewrite (quo_lift_prop _ _ _ (Qs be) (A->(Qs be)) _ (quot_sum_part1_compat be p)). 
+unfold quot_sum_part. apply quo_comp. apply (Compat be). 
+- specialize (Equiv be) as He. destruct He. apply H0.
+- apply H.
+Qed.
+\end{lstlisting}
+The \texttt{quot\_sum\_part2\_compat} lemma proves that the function \texttt{quot\_sum\_part2} is compatible with the equivalence relation \texttt{R be} on the barycentric space \texttt{A}. It demonstrates that the function respects the equivalence relation by using properties of the quotient and compatibility conditions.
+
+% Arguments BEquiv (I) (A): clear implicits.
+\subsection{QuotBarysum}
+\begin{lstlisting}
+Definition quotBarysum {I: BInterval.type} {A: Baryspace.type I} 
+    (be: BEquiv I A) (p: I): 
+      (Qs be) -> (Qs be) -> (Qs be) := 
+        fun xc => quo_lift _ (quot_sum_part2 I A be p xc) (quot_sum_part2_compat be p xc).
+\end{lstlisting}
+The \texttt{quotBarysum} definition provides a function that computes the barycentric sum in the quotient space \texttt{Qs be}. It lifts the barycentric sum operation to the quotient space using \texttt{quot\_sum\_part2} and ensures compatibility with the equivalence relation through \texttt{quot\_sum\_part2\_compat}.
+
+% (*
+% The barycentric sum on the quotient space has the property that
+% [x] +_r [y] = [x +_r y]
+% *)
+\subsubsection{quotBarysum corresponds}
+Lemma:
+\begin{lstlisting}
+Lemma quotBarysum_corresponds {I: BInterval.type} {A: Baryspace.type I}
+  (be: BEquiv I A) (p: I) (a b: A):
+    (Qs be) (barysum p a b) = quotBarysum be p (Qs be a) (Qs be b).
+Proof.
+unfold quotBarysum. unfold quot_sum_part2. unfold quot_sum_lift1. unfold quot_sum_part. 
+rewrite (quo_lift_prop _ _ _ (Qs be) (Qs be) _ (quot_sum_part2_compat be p (Qs be a))). 
+unfold quot_sum_part2. unfold quot_sum_lift1. unfold quot_sum_part.
+rewrite (quo_lift_prop _ _ _ (Qs be) (A->(Qs be)) _ (quot_sum_part1_compat be p)). 
+unfold quot_sum_part. reflexivity.
+Qed.
+\end{lstlisting}
+
+The \texttt{quotBarysum\_corresponds} lemma shows that the barycentric sum in the quotient space \texttt{Qs be} corresponds to the quotient of the barycentric sum in the original space \texttt{A}. It establishes the equivalence between \texttt{barysum} in \texttt{A} and \texttt{quotBarysum} in the quotient space.
+
+\subsection{Quot add0}
+\begin{lstlisting}
+Definition quot_add0 {I: BInterval.type} {A: Baryspace.type I}
+ (be: BEquiv I A): forall (ac bc: Qs be),
+    quotBarysum be 0 ac bc = ac.
+Proof. 
+intros.
+specialize (quo_sur_t _ _ _ (Qs be) ac) as H1.
+specialize (quo_sur_t _ _ _ (Qs be) bc) as H2.
+rewrite H1 H2.
+rewrite <- quotBarysum_corresponds. rewrite barysum0.
+reflexivity.
+Qed.
+\end{lstlisting}
+The \texttt{quot\_add0} definition proves that the barycentric sum in the quotient space \texttt{Qs be} with weight 0 is equal to the first operand. It shows that \texttt{quotBarysum} correctly reflects the behavior of barycentric sums with respect to the zero weight.
+
+\subsection{Quot addid}
+\begin{lstlisting}
+Definition quot_addid {I: BInterval.type} {A: Baryspace.type I} (be: BEquiv I A): 
+  ∀ (ac: Qs be) (p: I),
+    quotBarysum be p ac ac = ac.
+Proof. 
+intros.
+specialize (quo_sur_t _ _ _ (Qs be) ac) as H1.
+rewrite H1. 
+rewrite <- quotBarysum_corresponds. rewrite barysumid.
+reflexivity.
+Qed.
+\end{lstlisting}
+The \texttt{quot\_addid} definition proves that the barycentric sum of an element \texttt{ac} with itself in the quotient space \texttt{Qs be} using weight \texttt{p} is equal to \texttt{ac}. It ensures that \texttt{quotBarysum} respects the identity property for barycentric sums.
+
+
+\subsection{Quot addinv}
+\begin{lstlisting}
+Definition quot_addinv {I: BInterval.type} {A: Baryspace.type I}
+  (be: BEquiv I A): forall (ac bc: Qs be) (p: I),
+    quotBarysum be p ac bc = quotBarysum be (inv p) bc ac.
+Proof.
+intros.
+specialize (quo_sur_t _ _ _ (Qs be) ac) as H1.
+specialize (quo_sur_t _ _ _ (Qs be) bc) as H2.
+rewrite H1 H2. 
+rewrite <- !quotBarysum_corresponds. f_equal. 
+apply barysuminv.
+Qed.
+\end{lstlisting}
+The \texttt{quot\_addinv} definition proves that the barycentric sum in the quotient space \texttt{Qs be} with weights \texttt{p} and \texttt{inv p} is symmetric. Specifically, it shows that \texttt{quotBarysum} respects the property of additive inverses, ensuring that \texttt{quotBarysum be p ac bc} equals \texttt{quotBarysum be (inv p) bc ac}.
+
+\subsection{Quot addassoc}
+\begin{lstlisting}
+Definition quot_addassoc {I: BInterval.type} {A: Baryspace.type I} 
+  (be: BEquiv I A): forall (ac bc cc: Qs be) (p q r s: I),
+    s = (meet p q) -> meet p (inv q) = meet r (inv s) ->  
+    quotBarysum be p ac (quotBarysum be q bc cc) = 
+      quotBarysum be s (quotBarysum be r ac bc) cc.
+Proof.
+intros.
+specialize (quo_sur_t _ _ _ (Qs be) ac) as H2.
+specialize (quo_sur_t _ _ _ (Qs be) bc) as H3.
+specialize (quo_sur_t _ _ _ (Qs be) cc) as H4.
+rewrite H2 H3 H4. 
+rewrite <- !quotBarysum_corresponds. f_equal. apply barysumassoc;
+assumption.
+Qed.
+\end{lstlisting}
+The \texttt{quot\_addassoc} definition proves that the barycentric sum in the quotient space \texttt{Qs be} satisfies the associative property. It shows that the barycentric sum operation respects the association of weights, ensuring that the order of summation aligns with the associative law in the original space.
+
+% HB.instance Definition quot_is_bary {I: BInterval.type} {A: Baryspace.type I} {be: BEquiv I A} := Baryspace_of.Build 
+% I (Qs be) (quotBarysum be) (quot_add0 be) (quot_addid be) (quot_addinv be) (quot_addassoc be). 
+
+% Example test_sum_space {I: BInterval.type} (A B: Baryspace.type I) := Baryspace_of.axioms_ I (Qs (sum_bary_bequiv A B)).
+\subsection{Homomorphic}
+
+\begin{lstlisting}
+Definition homomorphic {I: BInterval.type} {A B: Baryspace.type I}
+  (phi: A -> B) : Prop := ∀ p x y, barysum p (phi x) (phi y) = phi (barysum p x y).
+\end{lstlisting}
+The \texttt{homomorphic} definition states that a function \texttt{phi} between barycentric spaces is homomorphic if it preserves the barycentric sum operation. Specifically, it ensures that applying \texttt{phi} to the barycentric sum of two elements is the same as the barycentric sum of their images under \texttt{phi}.
+
+
+% (*
+% homomorphisms 
+%   φA : A -> X, φB: B->X
+% naturally induces homomorphism
+%   φ : A⊕B -> X
+% *)
+% Definition AB_to_sum {I: BInterval.type} {A B X: Baryspace.type I} 
+%   (phia: A -> X)  (phib : B -> X) : (Qs (sum_bary_bequiv A B) -> X) :=
+%   fun p => match quo_sur _ _ _ _ p with
+%   | (a,t,b) => barysum t (phia a) (phib b)
+% end.
+
+% Check AB_to_sum.
+
+% (*
+% homomorphisms 
+%   φ : A⊕B -> X
+% induces homomorphism
+%   φA : A -> X, φB: B->X
+% on the condition that A and B are not empty. 
+% In constructive logic, we need to provide an instance of both A
+% and B to construct such homomorphism
+% *)
+
+% Definition sum_to_A {I: BInterval.type} {A B X: Baryspace.type I} 
+%   (b: B)
+%   (phi: Qs (sum_bary_bequiv A B) -> X) :  (A -> X) := 
+%     fun a => phi (class (Qs (sum_bary_bequiv A B)) (a,0,b)).
+
+% Definition sum_to_B {I: BInterval.type} {A B X: Baryspace.type I} 
+%   (a: A)
+%   (phi: Qs (sum_bary_bequiv A B) -> X) :  (B -> X) := 
+%     fun b => phi (class (Qs (sum_bary_bequiv A B)) (a,1,b)).
+
+
+% (*The induced functions are indeed homomorphisms*)
+% Lemma AB_to_sum_homomorphic {I: BInterval.type} {A B X: Baryspace.type I} 
+%   (phia: A -> X)  (phib : B -> X): homomorphic phia -> homomorphic phib -> 
+%   homomorphic ((AB_to_sum phia phib)).
+% Proof.
+%   unfold homomorphic.
+%   intros.
+%   unfold AB_to_sum. 
+%   destruct (quo_sur _ _ _ _ x) eqn: HDx. destruct (quo_sur _ _ _ _ y) eqn: HDy.
+%   intros. rewrite barysum_2. rewrite H. rewrite H0. 
+%   destruct (quo_sur _ _ _ _ (barysum p x y)) eqn: HDxy.
+%   specialize (quo_sur_t _ _ _ _ x). specialize (quo_sur_t _ _ _ _ y). specialize (quo_sur_t _ _ _ _ (barysum p x y)).
+%   rewrite HDx. rewrite HDy. rewrite HDxy. 
+%   intros.
+%   rewrite H2 in H1. rewrite H3 in H1.
+%   assert (barysum p (Qs (sum_bary_bequiv A B) (a, p0, b))
+%   (Qs (sum_bary_bequiv A B) (a0, p1, b0)) = Qs (sum_bary_bequiv A B) (barysum p (a, p0, b)
+%   (a0, p1, b0))). {
+%     symmetry. apply quotBarysum_corresponds.
+%   }
+%   rewrite H4 in H1. apply quo_comp_rev in H1 as Hcomp. 
+%   rewrite sum_barysum_expl in Hcomp. unfold sum_barysum in Hcomp.
+%   inversion Hcomp. 
+%   - reflexivity.
+%   - rewrite !barysum0. reflexivity.
+%   - rewrite !barysum1. reflexivity.
+% Qed.
+
+% Lemma sum_to_A_homomorphic  {I: BInterval.type} {A B X: Baryspace.type I} (b: B) 
+%   (phi: Qs (sum_bary_bequiv A B) -> X) : homomorphic phi 
+%     -> homomorphic (sum_to_A b phi).
+% Proof.
+%   unfold homomorphic.
+%   intros.
+%   unfold sum_to_A. rewrite H.
+%   assert( (barysum p (Qs (sum_bary_bequiv A B) (x, 0, b))(Qs (sum_bary_bequiv A B)
+%   (y, 0, b))) = Qs (sum_bary_bequiv A B) (barysum p (x,0,b) (y,0,b))).
+%   {
+%     symmetry. apply quotBarysum_corresponds.
+%   }
+%   rewrite H0. rewrite sum_barysum_expl. unfold sum_barysum. unfold barysumI.
+%   rewrite !barysumid. rewrite <- !inv_1_0. rewrite bracket_1_1. reflexivity.
+% Qed.
+
+% Lemma sum_to_B_homomorphic  {I: BInterval.type} {A B X: Baryspace.type I} (a: A) 
+%   (phi: Qs (sum_bary_bequiv A B) -> X) : homomorphic phi 
+%     -> homomorphic (sum_to_B a phi).
+% Proof.
+%   unfold homomorphic.
+%   intros.
+%   unfold sum_to_B. rewrite H.
+%   assert( (barysum p (Qs (sum_bary_bequiv A B) (a, 1, x))(Qs (sum_bary_bequiv A B)
+%   (a, 1, y))) = Qs (sum_bary_bequiv A B) (barysum p (a,1,x) (a,1,y))).
+%   {
+%     symmetry. apply quotBarysum_corresponds.
+%   }
+%   rewrite H0. rewrite sum_barysum_expl. unfold sum_barysum. unfold barysumI.
+%   rewrite !barysumid. rewrite bracket_1_1. reflexivity.
+% Qed.
+
+
+% (*
+% There is a one-to-one correspondence between 
+% (φA,φB) and φ
+% That is, 
+% Bar(A⊕B,X) ≅ Bar(A,X) × Bar(B,X)
+% *)
+
+% Theorem AB_sum_isomorphism {I: BInterval.type} {A B X: Baryspace.type I} (a: A) (b : B)
+%   (phi: Qs (sum_bary_bequiv A B) -> X) (Hom: homomorphic phi):
+%    AB_to_sum (sum_to_A b phi) (sum_to_B a phi) = phi.
+% Proof.
+%   unfold homomorphic in Hom. apply functional_extensionality.
+%   intros. unfold sum_to_A. unfold sum_to_B. unfold AB_to_sum.
+%   destruct (quo_sur _ _ _ _ x) eqn: Hx. rewrite Hom. 
+%   assert ((barysum p
+%   (Qs (sum_bary_bequiv A B) (a0, 0, b)) (Qs (sum_bary_bequiv A B) (a, 1, b0))) = Qs (sum_bary_bequiv A B) (barysum p (a0, 0, b) (a, 1, b0))).
+%   {
+%     symmetry. apply quotBarysum_corresponds.
+%   }
+%   rewrite H. rewrite sum_barysum_expl. unfold sum_barysum. 
+%   rewrite <- inv_0_1. rewrite <-inv_1_0.
+%   rewrite bracket_zero. rewrite meetrC. apply meet_0_absorb. unfold barysumI.
+%   rewrite <- (meet_sum0 p). rewrite (meetrC p 1). rewrite meetl1.
+%   specialize (quo_sur_t _ _ _ _ x) as H1. rewrite Hx in H1.
+%   destruct (eq0_i_decidable I p). 
+%   - rewrite H0. rewrite bracket_zero. apply meet_0_absorb. rewrite barysum0. 
+%     rewrite H1. f_equal. apply quo_comp. rewrite H0. apply A0.
+%   - rewrite bracket_0_1. apply H0. rewrite barysum0. rewrite barysum1. rewrite H1.
+%     reflexivity.
+% Qed.
+
+
+
+
+
+
+
+\end{document}
