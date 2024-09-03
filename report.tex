@@ -1,9 +1,13 @@
 \documentclass[a4paper,10pt]{article} % 10pt font size
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{txfonts}
 \usepackage{geometry}
 \usepackage{listings} % Better than verbatim for code
 \geometry{top=2cm, bottom=2cm, left=2cm, right=2cm}
+
+\newcommand{\meet}{\circledwedge}
+\newcommand{\join}{\circledvee}
 
 \title{DURF}
 \author{Lucas, Puming, Frank, Irina}
@@ -13,6 +17,7 @@
   basicstyle=\small\ttfamily,
   frame=single
 }
+
 
 \begin{document}
 
@@ -44,12 +49,12 @@ HB.mixin Record CMonoid_of M := {
 Definition of Interval:
 \begin{itemize}
     \item Interval \(I\) is an interval between \([0, 1]\)
-    \item Join: written as \&, interval join with interval, result interval
-    \item Meet: written as \(\bigotimes\), interval meet with interval, result interval
+    \item Join: written as \join, interval join with interval, result interval
+    \item Meet: written as \(\meet\), interval meet with interval, result interval
     \item Associativity, Commutativity, Left identity
     \item Inversion: the inverse of an interval is still an interval
     \item The inversion of an inversion interval is the interval itself
-    \item The inversion follows De Morgan's law: \(\overline{p \& q} = \overline{p} \bigotimes \overline{q}\)
+    \item The inversion follows De Morgan's law: \(\overline{p \join q} = \overline{p} \meet \overline{q}\)
 \end{itemize}
 \begin{lstlisting}
 HB.mixin Record Interval_of I := {
@@ -90,8 +95,8 @@ Qed.
     \item 0: zero
     \item 1: one
     \item \(\overline{p}\): inv \(p\)
-    \item \(\bigotimes\): meet
-    \item \&: join
+    \item \(\meet\): meet
+    \item \join: join
 \end{itemize}
 \begin{lstlisting}
 Notation "0" := zero.
@@ -102,7 +107,7 @@ Notation "!" := inv.
 \subsubsection{De\_morgan}
 Theorem de\_morgan: 
 \begin{itemize}
-    \item For any interval \(p\), \(q\), \(\overline{p \bigotimes q} = \overline{p} \& \overline{q}\).
+    \item For any interval \(p\), \(q\), \(\overline{p \meet q} = \overline{p} \join \overline{q}\).
 \end{itemize}
 \begin{lstlisting}
 Theorem inv_de_morgan_r: forall {A: Interval.type} (p q: A), !(meet p q) = join (!p) (!q).
@@ -115,7 +120,7 @@ Qed.
 \subsubsection{inv0isid}
 Lemma:
 \begin{itemize}
-    \item $i \bigotimes \overline{0} = i$
+    \item $i \meet \overline{0} = i$
 \end{itemize}
 \begin{lstlisting}
 Lemma inv0isid: forall {I: Interval.type} (i:I), meet i (!(0:I)) = i.
@@ -157,7 +162,7 @@ Definition of baryspace:
     \item Barysum0: \(a +_0 b = a\)
     \item Barysumid: \(a +_p a = a\)
     \item Barysuminv: \(a +_p b = b +_{\overline{p}} a\)
-    \item Barysumassoc: if \(s = p \bigotimes q\), and \(p \bigotimes \overline{q} = r \bigotimes \overline{s}\), then \(a +_p(b +_q c) = (a +_r b) +_s c\)
+    \item Barysumassoc: if \(s = p \meet q\), and \(p \meet \overline{q} = r \meet \overline{s}\), then \(a +_p(b +_q c) = (a +_r b) +_s c\)
 \end{itemize}
 \begin{lstlisting}
 HB.mixin Record Baryspace_of (I : Interval.type) A := {
@@ -188,15 +193,15 @@ Qed.
 Definition Baryinterval:
 \begin{itemize}
     \item Inversion of baryinterval: $\overline{p +_rq} = \overline{p} + _r\overline{q}$
-    \item Meet of baryinterval: $s \bigotimes (p +_rq) = (s \bigotimes p) + _r(s \bigotimes q)$
-    \item Cancel: when $q \neq 0$, if $p \bigotimes q = p’ \bigotimes q$ ,then $p = p’$
-    \item meet\_sum0: $r \bigotimes s = 0 + _rs$
+    \item Meet of baryinterval: $s \meet (p +_rq) = (s \meet p) + _r(s \meet q)$
+    \item Cancel: when $q \neq 0$, if $p \meet q = p’ \meet q$ ,then $p = p’$
+    \item meet\_sum0: $r \meet s = 0 + _rs$
     \item Bracket: takes three interval type argument and returns an interval. $[p, q]_r$
-    \item Bracket basic: $[r, s]_t \bigotimes (r + _ts) = t \bigotimes s$
-    \item Bracket assoc1: $(x +_ry) + _sz = x + _{r \& s}(y + _{[r, 1]_s}z)$
-    \item Bracket assoc2: $x + _r(y + _sz) = (x + _{[1, \overline{s}]_r}y)+ _{r \bigotimes s}z$
+    \item Bracket basic: $[r, s]_t \meet (r + _ts) = t \meet s$
+    \item Bracket assoc1: $(x +_ry) + _sz = x + _{r \join s}(y + _{[r, 1]_s}z)$
+    \item Bracket assoc2: $x + _r(y + _sz) = (x + _{[1, \overline{s}]_r}y)+ _{r \meet s}z$
     \item Bracket inv: $\overline{[r, s]_t} = [s, r]_{\overline{t}}$
-    \item Bracket dist: $[a \bigotimes r, b \bigotimes s]_t = [a, b]_{[r, s]_t}$
+    \item Bracket dist: $[a \meet r, b \meet s]_t = [a, b]_{[r, s]_t}$
 \end{itemize}
 \begin{lstlisting}
 HB.mixin Record BInterval_of I of _BaryIntv_of I of Interval_of I:= {
@@ -232,7 +237,7 @@ Notation "[ a , b ]_ c" := (bracket c a b) (at level 40).
 \subsubsection{0 absorbtion}
 Theorem:
 \begin{itemize}
-    \item  $0 \bigotimes a = 0$
+    \item  $0 \meet a = 0$
 \end{itemize}
 \begin{lstlisting}
 Theorem meet_0_absorb: forall {I: BInterval.type} (a:I), meet (0:I) a = (0:I).
@@ -244,7 +249,7 @@ Qed.
 \subsubsection{Join 1 absorbtion}
 Corollary:
 \begin{itemize}
-    \item $1 \& a = 1$
+    \item $1 \join a = 1$
 \end{itemize}
 \begin{lstlisting}
 Corollary join_1_absorb: forall {I: BInterval.type} (a:I), join (1:I) a = (1:I).
@@ -257,7 +262,7 @@ Qed.
 \subsubsection{Join sum 1}
 Theorem:
 \begin{itemize}
-    \item $r \& s = s + _1I$
+    \item $r \join s = s + _1I$
 \end{itemize}
 \begin{lstlisting}
 Theorem join_sum1: forall (I: BInterval.type) (r s: _BaryIntv.sort I), (join r s) = barysum r s (1: _BaryIntv.sort I).
@@ -270,7 +275,7 @@ rewrite inv_inv. reflexivity. Qed.
 \subsubsection{Join bary dist}
 Theorem:
 \begin{itemize}
-    \item $s \& (p +_rq) = (s \& p) + _r(s \& q)$
+    \item $s \join (p +_rq) = (s \join p) + _r(s \join q)$
 \end{itemize}
 \begin{lstlisting}
 Theorem join_bary_dist: forall (I: BInterval.type) (p q r s: _BaryIntv.sort I), (join s (barysum r p q)) = barysum r (join s p) (join s q).
@@ -383,7 +388,7 @@ barysum t (r:_BaryIntv.sort I) s.
 \subsubsection{Bracket decomp 1 0}
 Lemma:
 \begin{itemize}
-    \item If $x + _p(y + _qz) = 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x, y]_r \bigotimes \overline{[x + _ry, z]_s} = [x, y + _qz]_p \bigotimes \overline{[y, z]_q}$
+    \item If $x + _p(y + _qz) = 0$, and $s = p \meet q$, and $p \meet \overline{q} = r \meet \overline{s}$, then $[x, y]_r \meet \overline{[x + _ry, z]_s} = [x, y + _qz]_p \meet \overline{[y, z]_q}$
 \end{itemize}
 \begin{lstlisting}
 Lemma bracket_decomp1_0: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
@@ -409,7 +414,7 @@ Qed.
 \subsubsection{Bracket decomp 2 0}
 Lemma:
 \begin{itemize}
-    \item If $x + _p(y + _qz) = 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \bigotimes [y, z]_q$
+    \item If $x + _p(y + _qz) = 0$, and $s = p \meet q$, and $p \meet \overline{q} = r \meet \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \meet [y, z]_q$
 \end{itemize}
 \begin{lstlisting}
 Lemma bracket_decomp2_0: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
@@ -443,7 +448,7 @@ Axiom eq0_i_decidable: forall (I:BInterval.type) (a: I), a = (0:I) \/ a <> (0:I)
 \subsubsection{meet0}
 Theorem:
 \begin{itemize}
-    \item If $a \bigotimes b = 0$, then a = 0 or b = 0.
+    \item If $a \meet b = 0$, then a = 0 or b = 0.
 \end{itemize}
 \begin{lstlisting}
 Theorem meet0: forall (I:BInterval.type) (a b: I), meet a b = 0 -> a = 0 \/ b = 0.
@@ -458,7 +463,7 @@ Qed.
 \subsubsection{Bracket 0'}
 Theorem:
 \begin{itemize}
-    \item If $a \bigotimes c = 0$, then $[b, d]_a \bigotimes c = 0$
+    \item If $a \meet c = 0$, then $[b, d]_a \meet c = 0$
 \end{itemize}
 \begin{lstlisting}
 Theorem bracket_zero': forall {I:BInterval.type} (a b c d:I), meet a c = 0 -> meet (bracket a b d) c = 0.
@@ -486,7 +491,7 @@ Qed.
 \subsubsection{Bracket decomp1\_}
 Lemma:
 \begin{itemize}
-    \item If $x + _p(y +_qz) \neq 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x, y]_r \bigotimes \overline{[x + _ry, z]_s} = [x, y +_qz]_p \bigotimes \overline{[y, z]_q}$
+    \item If $x + _p(y +_qz) \neq 0$, and $s = p \meet q$, and $p \meet \overline{q} = r \meet \overline{s}$, then $[x, y]_r \meet \overline{[x + _ry, z]_s} = [x, y +_qz]_p \meet \overline{[y, z]_q}$
 \end{itemize}
 \begin{lstlisting}
 Lemma bracket_decomp1_: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
@@ -525,7 +530,7 @@ Qed.
 \subsubsection{bracket decomp2\_}
 Lemma:
 \begin{itemize}
-    \item If $x + _p(y + _qz) \neq 0$, and $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \bigotimes [y, z]_q$
+    \item If $x + _p(y + _qz) \neq 0$, and $s = p \meet q$, and $p \meet \overline{q} = r \meet \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \meet [y, z]_q$
 \end{itemize}
 \begin{lstlisting}
 Lemma bracket_decomp2_: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
@@ -556,7 +561,7 @@ Qed.
 \subsubsection{Bracket decomp1}
 Theorem:
 \begin{itemize}
-    \item For all intervals x, y, z, p, q, r, s, if $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x, y]_r \bigotimes\overline{[x + _ry, z]_s} = [x, y + _qz]_p \bigotimes \overline{[y, z]_q}$.
+    \item For all intervals x, y, z, p, q, r, s, if $s = p \meet q$, and $p \meet \overline{q} = r \meet \overline{s}$, then $[x, y]_r \meet\overline{[x + _ry, z]_s} = [x, y + _qz]_p \meet \overline{[y, z]_q}$.
 \end{itemize}
 \begin{lstlisting}
 Theorem bracket_decomp1: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
@@ -573,7 +578,7 @@ Qed.
 \subsubsection{Bracket decomp2}
 Theorem:
 \begin{itemize}
-    \item For all intervals x, y, z, p, q, r, s, if $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \bigotimes [y, z]_q$.
+    \item For all intervals x, y, z, p, q, r, s, if $s = p \meet q$, and $p \meet \overline{q} = r \meet \overline{s}$, then $[x + _ry, z]_s = [x, y + _qz]_p \meet [y, z]_q$.
 \end{itemize}
 \begin{lstlisting}
 Theorem bracket_decomp2: forall (I:BInterval.type) p q r s (x y z: _BaryIntv.sort I),
@@ -766,7 +771,7 @@ Qed.
 \subsubsection{Sum barysumassoc}
 Lemma:
 \begin{itemize}
-    \item If $s = p \bigotimes q$, and $p \bigotimes \overline{q} = r \bigotimes \overline{s}$, then $(p, a, (q, b, c)) = (s, (r, a, b), c)$
+    \item If $s = p \meet q$, and $p \meet \overline{q} = r \meet \overline{s}$, then $(p, a, (q, b, c)) = (s, (r, a, b), c)$
 \end{itemize}
 \begin{lstlisting}
 Lemma sum_barysumassoc: forall {I: BInterval.type} {A B: Baryspace.type I} (a b c: SumBarySpace A B) (p q r s: I),
